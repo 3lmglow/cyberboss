@@ -30,6 +30,6 @@
     "sharp": "0.35.3",
     "timeline-for-agent": "github:WenXiaoWendy/timeline-for-agent#main",
     "whereabouts-mcp": "github:WenXiaoWendy/whereabouts-mcp#main",
-    "ws": "^8.19.0"
+    "ws": "8.21.3"
   }
 }
