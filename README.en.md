@@ -3,13 +3,13 @@
 [中文](./README.zh-CN.md) · English
 
 # The Overbearing Boss Fell for My ADHD
-## Cyberboss: a WeChat bridge for Codex and Claude Code
+## Cyberboss: a WeChat bridge for Codex, Claude Code, and Yuke Home
 
 > "Keep escaping into dopamine if you want. I'll still catch you at the next timestamp."
 
 [![Node >=22](https://img.shields.io/badge/Node-22%2B-3C873A)](./package.json)
 [![License: AGPLv3](https://img.shields.io/badge/License-AGPLv3-b31b1b)](./LICENSE)
-[![Runtime-Codex%20%7C%20ClaudeCode](https://img.shields.io/badge/Runtime-Codex%20%7C%20ClaudeCode-111827)](#technical-stack)
+[![Runtime-Codex%20%7C%20ClaudeCode%20%7C%20YukeHome](https://img.shields.io/badge/Runtime-Codex%20%7C%20ClaudeCode%20%7C%20YukeHome-111827)](#technical-stack)
 [![Bridge-Weixin](https://img.shields.io/badge/Bridge-Weixin-07C160)](#technical-stack)
 [![Timeline-Enabled](https://img.shields.io/badge/Timeline-Enabled-8b5cf6)](#core-features)
 
@@ -77,7 +77,7 @@ Cyberboss builds on top of `timeline-for-agent`, then adds WeChat, reminders, di
 ## Technical Stack
 
 - **Core**
-  A pluggable runtime layer for Codex and Claude Code, with the same WeChat command surface and shared-thread workflow.
+  A pluggable runtime layer for Codex, Claude Code, and a Yuke Home-managed main chat, with the same WeChat command surface.
 - **Bridge**
   A WeChat HTTP bridge with long-poll synchronization for inbound messages, outbound replies, files, and status transitions.
 - **Task System**
@@ -86,6 +86,12 @@ Cyberboss builds on top of `timeline-for-agent`, then adds WeChat, reminders, di
   Timeline, diary, random check-ins, file delivery, and related runtime actions.
 - **Optional Tooling**
   MCP or other local hardware / software integrations can be added, but they are optional.
+
+### Yuke Home managed-main mode
+
+Set `CYBERBOSS_RUNTIME=yukehome` to keep Cyberboss as the full WeChat, queue, check-in, media, diary, reminder, timeline, sticker, file, and location system while Yuke Home owns the canonical model thread. Every Cyberboss turn resolves Yuke Home's current main conversation, is saved through the same history and identity-rebuild path, and receives only the response stream for that turn. Replies started in the Yuke Home UI are never mirrored to WeChat.
+
+The Yuke Home Codex App Server remains the only model-process owner. Register Cyberboss's existing tool host there with `scripts/configure-yukehome-codex-mcp.js`; this avoids an unsupported shared raw WebSocket transport and keeps the native Cyberboss tools available to the shared brain.
 
 ## Why It Exists
 
@@ -103,7 +109,7 @@ Cyberboss assumes none of that. It treats the user as someone who may drift, dis
 ### Requirements
 
 - Node.js `>= 22`
-- `codex` or `claude` installed locally
+- `codex` or `claude` installed locally, or a same-host Yuke Home bridge
 - Chrome / Chromium / Edge if you want screenshot features
 
 ### Get the source and install dependencies
@@ -120,6 +126,7 @@ npm install
 
 `Cyberboss` reads environment variables from:
 
+- `${CYBERBOSS_STATE_DIR}/.env` when a state directory is configured
 - `.env` in the current project directory
 - `${HOME}/.cyberboss/.env`
 - the current shell environment
@@ -164,10 +171,18 @@ CYBERBOSS_LOCATION_PLACE_RADIUS_METERS=150
 CYBERBOSS_LOCATION_BATTERY_HISTORY_LIMIT=100
 ```
 
+For Yuke Home managed-main mode, use an independent token shared only with the Yuke Home backend:
+
+```dotenv
+CYBERBOSS_RUNTIME=yukehome
+CYBERBOSS_YUKEHOME_BASE_URL=http://127.0.0.1:3000
+CYBERBOSS_YUKEHOME_TOKEN=replace_with_at_least_32_random_characters
+```
+
 What these do:
 
 - `CYBERBOSS_RUNTIME`
-  Choose `codex` or `claudecode`. The command set stays the same.
+  Choose `codex`, `claudecode`, or `yukehome`. The command set stays the same; Yuke Home owns thread lifecycle in managed-main mode.
 - `CYBERBOSS_CODEX_ENDPOINT`
   Reuse an existing shared Codex app-server instead of spawning a private runtime.
 - `CYBERBOSS_CODEX_COMMAND`

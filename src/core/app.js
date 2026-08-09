@@ -7,6 +7,7 @@ const { DEFAULT_MIN_WEIXIN_CHUNK, MAX_MIN_WEIXIN_CHUNK } = require("../adapters/
 const { persistIncomingWeixinAttachments } = require("../adapters/channel/weixin/media-receive");
 const { createCodexRuntimeAdapter } = require("../adapters/runtime/codex");
 const { createClaudeCodeRuntimeAdapter } = require("../adapters/runtime/claudecode");
+const { createYukehomeRuntimeAdapter } = require("../adapters/runtime/yukehome");
 const { findModelByQuery } = require("../adapters/runtime/codex/model-catalog");
 const { createTimelineIntegration } = require("../integrations/timeline");
 const {
@@ -54,6 +55,9 @@ const INBOUND_IMAGE_BATCH_IDLE_MS = 1_500;
 function createRuntimeAdapter(config) {
   if (config.runtime === "claudecode") {
     return createClaudeCodeRuntimeAdapter(config);
+  }
+  if (config.runtime === "yukehome") {
+    return createYukehomeRuntimeAdapter(config);
   }
   return createCodexRuntimeAdapter(config);
 }
@@ -449,6 +453,8 @@ class CyberbossApp {
           workspaceId: prepared.workspaceId,
           accountId: prepared.accountId,
           senderId: prepared.senderId,
+          messageId: prepared.messageId,
+          originKind: prepared.provider === "system" ? "system" : "user",
         },
       });
       this.runtimeContextStore?.setActiveContext?.({
@@ -1094,6 +1100,14 @@ class CyberbossApp {
   }
 
   async handleNewCommand(normalized) {
+    if (this.runtimeAdapter.describe?.()?.managedMainThread) {
+      await this.channelAdapter.sendText({
+        userId: normalized.senderId,
+        text: "💡 已由 Yuke Home 托管当前主聊天；这里会自动跟随主会话，不需要另开线程。",
+        contextToken: normalized.contextToken,
+      });
+      return;
+    }
     const bindingKey = this.runtimeAdapter.getSessionStore().buildBindingKey({
       workspaceId: normalized.workspaceId,
       accountId: normalized.accountId,
@@ -1112,6 +1126,14 @@ class CyberbossApp {
   }
 
   async handleRereadCommand(normalized) {
+    if (this.runtimeAdapter.describe?.()?.managedMainThread) {
+      await this.channelAdapter.sendText({
+        userId: normalized.senderId,
+        text: "💡 Yuke Home 会在每轮自动加载当前身份与主会话，不需要手动 reread。",
+        contextToken: normalized.contextToken,
+      });
+      return;
+    }
     const bindingKey = this.runtimeAdapter.getSessionStore().buildBindingKey({
       workspaceId: normalized.workspaceId,
       accountId: normalized.accountId,
@@ -1152,6 +1174,14 @@ class CyberbossApp {
   }
 
   async handleCompactCommand(normalized) {
+    if (this.runtimeAdapter.describe?.()?.managedMainThread) {
+      await this.channelAdapter.sendText({
+        userId: normalized.senderId,
+        text: "💡 当前主聊天由 Yuke Home 和 Codex 自动管理上下文压缩，无需从微信单独 compact。",
+        contextToken: normalized.contextToken,
+      });
+      return;
+    }
     const bindingKey = this.runtimeAdapter.getSessionStore().buildBindingKey({
       workspaceId: normalized.workspaceId,
       accountId: normalized.accountId,
@@ -1204,6 +1234,14 @@ class CyberbossApp {
   }
 
   async handleSwitchCommand(normalized, command) {
+    if (this.runtimeAdapter.describe?.()?.managedMainThread) {
+      await this.channelAdapter.sendText({
+        userId: normalized.senderId,
+        text: "💡 微信端始终跟随 Yuke Home 当前主聊天，切换主聊天后下一轮会自动跟过去。",
+        contextToken: normalized.contextToken,
+      });
+      return;
+    }
     const targetThreadId = normalizeThreadId(command.args);
     if (!targetThreadId) {
       await this.channelAdapter.sendText({

@@ -12,7 +12,7 @@ It defines stable internal actions first, then lets each channel expose its own 
 
 This keeps the core naming stable when new runtimes or channels are added later.
 
-The runtime can be `codex` or `claudecode`, but the documented command surface stays the same.
+The runtime can be `codex`, `claudecode`, or `yukehome`, but the documented command surface stays the same.
 
 ## Current Action Groups
 
@@ -114,3 +114,5 @@ Notes:
 - there is no separate `/context` command; use `/status` and read the `📦 context` line
 - `/compact` asks the current thread to compact its context and reports start / finish back to WeChat
 - file sending is still available, but no longer exposed as a WeChat command
+- under the `yukehome` managed-main runtime, `/new`, `/reread`, `/compact`, and `/switch` explain that Yuke Home owns and automatically follows the current main chat; they do not create a divergent local thread
+- under the `yukehome` runtime, `/stop` interrupts only the active turn initiated by Cyberboss
