@@ -32,6 +32,10 @@ Responsible for:
 - sending messages into the specific agent runtime
 - handling thread / session / approval / stop
 
+The `yukehome` adapter is a managed-main runtime. It does not start or attach to a second model process. It submits each owned turn to Yuke Home's loopback-authenticated bridge, which resolves the current main conversation and reuses Yuke Home's canonical persistence, identity, thread rebuild, and tools. The adapter maps only that HTTP response stream back to its originating WeChat target; it has no subscription path for turns started elsewhere.
+
+Cyberboss's project tool host remains a separate stdio MCP server registered in the Yuke Home Codex configuration. Its runtime context file is reloaded on every tool call so the MCP process sees the current WeChat account, sender, and binding even though it is a different process.
+
 Not responsible for:
 
 - WeChat protocol details

@@ -57,6 +57,10 @@ class RuntimeContextStore {
   }
 
   resolveActiveContext({ workspaceRoot = "", runtimeId = "" } = {}) {
+    // The MCP tool host runs in a different process from the WeChat bridge.
+    // Reload on every call so a newly routed turn is visible before a tool is
+    // invoked, rather than freezing the context that existed at MCP startup.
+    this.load();
     const normalizedWorkspaceRoot = normalizeText(workspaceRoot);
     if (normalizedWorkspaceRoot) {
       const exact = this.state.contextsByWorkspaceRoot?.[normalizedWorkspaceRoot];

@@ -3,13 +3,13 @@
 中文 · [English](./README.md)
 
 # 《霸道总裁爱上患有 ADHD 的我》
-## 支持 Codex 与 Claude Code 的微信桥接系统：Cyberboss
+## 支持 Codex、Claude Code 与 Yuke Home 主聊天的微信桥接系统：Cyberboss
 
 > “你尽管在多巴胺里逃避，但我永远会在下一个时间戳抓到你。”
 
 [![Node >=22](https://img.shields.io/badge/Node-22%2B-3C873A)](./package.json)
 [![License: AGPLv3](https://img.shields.io/badge/License-AGPLv3-b31b1b)](./LICENSE)
-[![Runtime-Codex%20%7C%20ClaudeCode](https://img.shields.io/badge/Runtime-Codex%20%7C%20ClaudeCode-111827)](#technical-stack)
+[![Runtime-Codex%20%7C%20ClaudeCode%20%7C%20YukeHome](https://img.shields.io/badge/Runtime-Codex%20%7C%20ClaudeCode%20%7C%20YukeHome-111827)](#technical-stack)
 [![Bridge-Weixin](https://img.shields.io/badge/Bridge-Weixin-07C160)](#technical-stack)
 [![Timeline-Enabled](https://img.shields.io/badge/Timeline-Enabled-8b5cf6)](#core-features)
 
@@ -80,7 +80,7 @@ Reminder 队列不是给用户设的闹钟，而是模型留给未来自己的�
 ## 技术实现
 
 - **Core**
-  可切换的 Codex / Claude Code runtime 层，对外保持同一套微信命令与共享线程工作流。
+  可切换的 Codex / Claude Code / Yuke Home 当前主聊天 runtime 层，对外保持同一套微信命令。
 - **Bridge**
   微信 HTTP bridge，支持长轮询同步，把微信侧输入、输出、文件和状态变化接到同一条 agent 链路里。
 - **Task System**
@@ -89,6 +89,12 @@ Reminder 队列不是给用户设的闹钟，而是模型留给未来自己的�
   涵盖 Timeline、Diary、Check-in、File Transfer 等核心能力，其中 `checkin` 就是随机轮询唤醒入口。
 - **Optional Tooling**
   支持接入 MCP 与其他本地硬件/软件接口；是否启用完全取决于你的本地环境。
+
+### Yuke Home 当前主聊天模式
+
+设置 `CYBERBOSS_RUNTIME=yukehome` 后，Cyberboss 仍完整保留微信收发、队列、随机 check-in、媒体、日记、提醒、时间轴、贴纸、文件和位置能力，只把权威模型线程交给 Yuke Home 管理。每一轮都会重新解析 Yuke Home 当时的主聊天，走同一份历史、身份重建和工具链；Cyberboss 只消费自己发起的那次响应流，Yuke Home 网页或 App 发起的回复不会被镜像到微信。
+
+Yuke Home 的 Codex App Server 仍是唯一模型进程 owner。用 `scripts/configure-yukehome-codex-mcp.js` 把 Cyberboss 现有 tool host 注册进去，即可让同一条脑子保留原生工具，而不依赖不适合生产的共享 raw WebSocket。
 
 ## 开发初衷：拒绝“自律神话”
 
@@ -106,7 +112,7 @@ Cyberboss 假设你是一个完全不可控的个体：你不需要先点开始�
 ### 环境前提
 
 - Node.js `>= 22`
-- 本机已安装 `codex` 或 `claude`
+- 本机已安装 `codex` 或 `claude`，或同机已有 Yuke Home bridge
 - 如果需要截图，本机需要可用的 Chrome / Chromium / Edge
 
 ### 获取源码与安装依赖
@@ -125,6 +131,7 @@ npm install
 
 `Cyberboss` 会按这个顺序读取环境变量：
 
+- 配置了 state dir 时的 `${CYBERBOSS_STATE_DIR}/.env`
 - 当前项目目录下的 `.env`
 - `${HOME}/.cyberboss/.env`
 - 当前 shell 环境
@@ -176,10 +183,18 @@ CYBERBOSS_LOCATION_PLACE_RADIUS_METERS=150
 CYBERBOSS_LOCATION_BATTERY_HISTORY_LIMIT=100
 ```
 
+接入 Yuke Home 当前主聊天时，使用一个只与 Yuke Home backend 共用的独立 token：
+
+```dotenv
+CYBERBOSS_RUNTIME=yukehome
+CYBERBOSS_YUKEHOME_BASE_URL=http://127.0.0.1:3000
+CYBERBOSS_YUKEHOME_TOKEN=replace_with_at_least_32_random_characters
+```
+
 这些变量的作用：
 
 - `CYBERBOSS_RUNTIME`
-  选择 `codex` 或 `claudecode`。两种 runtime 使用同一套命令。
+  选择 `codex`、`claudecode` 或 `yukehome`。三种 runtime 使用同一套命令；托管主聊天模式下线程生命周期由 Yuke Home 负责。
 - `CYBERBOSS_CODEX_ENDPOINT`
   复用已有的共享 Codex app-server，而不是新起私有 runtime。
 - `CYBERBOSS_CODEX_COMMAND`

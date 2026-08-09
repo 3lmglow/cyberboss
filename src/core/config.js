@@ -17,6 +17,8 @@ function readConfig() {
     allowedUserIds: readListEnv("CYBERBOSS_ALLOWED_USER_IDS"),
     channel: readTextEnv("CYBERBOSS_CHANNEL") || "weixin",
     runtime: readTextEnv("CYBERBOSS_RUNTIME") || "codex",
+    yukehomeBaseUrl: readTextEnv("CYBERBOSS_YUKEHOME_BASE_URL") || "http://127.0.0.1:3000",
+    yukehomeToken: readTextEnv("CYBERBOSS_YUKEHOME_TOKEN"),
     timelineCommand: readTextEnv("CYBERBOSS_TIMELINE_COMMAND") || "timeline-for-agent",
     accountId: readTextEnv("CYBERBOSS_ACCOUNT_ID"),
     weixinBaseUrl: readTextEnv("CYBERBOSS_WEIXIN_BASE_URL") || "https://ilinkai.weixin.qq.com",

@@ -1,0 +1,30 @@
+[Unit]
+Description=CyberBoss WeChat bridge for Yuke Home main chat
+After=network-online.target yukehome-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/apps/cyberboss
+EnvironmentFile=/home/ubuntu/.config/yukehome/cyberboss-bridge.env
+EnvironmentFile=-/home/ubuntu/.cyberboss/.env
+Environment=CYBERBOSS_RUNTIME=yukehome
+Environment=CYBERBOSS_STATE_DIR=/home/ubuntu/.cyberboss
+Environment=CYBERBOSS_WORKSPACE_ROOT=/home/ubuntu/.local/share/yukehome-codex/workspace
+Environment=CYBERBOSS_YUKEHOME_BASE_URL=http://127.0.0.1:3000
+ExecStart=/home/ubuntu/.nvm/versions/node/v22.23.1/bin/node /home/ubuntu/apps/cyberboss/bin/cyberboss.js start --checkin
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/.cyberboss
+
+[Install]
+WantedBy=multi-user.target

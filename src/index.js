@@ -17,8 +17,14 @@ function ensureDefaultStateDirectory() {
 }
 
 function loadEnv() {
+  const configuredStateDir = readFlagValue(process.argv.slice(2), "--state-dir")
+    || String(process.env.CYBERBOSS_STATE_DIR || "").trim();
+  if (configuredStateDir) {
+    process.env.CYBERBOSS_STATE_DIR = path.resolve(configuredStateDir);
+  }
   ensureDefaultStateDirectory();
   const candidates = [
+    ...(configuredStateDir ? [path.join(path.resolve(configuredStateDir), ".env")] : []),
     path.join(process.cwd(), ".env"),
     path.join(os.homedir(), ".cyberboss", ".env"),
   ];
