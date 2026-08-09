@@ -30,7 +30,9 @@ class SystemMessageDispatcher {
       threadKey: `system:${message.senderId}`,
       senderId: message.senderId,
       messageId: message.id,
-      text: buildSystemInboundText(message?.text, message?.createdAt),
+      text: buildSystemInboundText(message?.text, message?.createdAt, {
+        runtimeId: this.config.runtime,
+      }),
       attachments: [],
       command: "message",
       contextToken,
@@ -40,10 +42,20 @@ class SystemMessageDispatcher {
   }
 }
 
-function buildSystemInboundText(text, createdAt = "") {
+function buildSystemInboundText(text, createdAt = "", { runtimeId = "" } = {}) {
   const body = normalizeText(text);
+  const yukehomeManaged = normalizeText(runtimeId).toLowerCase() === "yukehome";
   const localTime = formatSystemLocalTime(createdAt);
-  const sections = [
+  const sections = yukehomeManaged ? [
+    "SYSTEM ACTION MODE: internal trigger, not user chat.",
+    "Decide whether there is a genuinely useful and natural reason to contact the user now.",
+    "Use only capabilities that are actually available in this turn; it is fine to use no tools.",
+    "Do not claim to update a timeline, diary, location, or any other unavailable capability.",
+    "If you act, return only one short natural WeChat message that briefly reflects what you did or what changed.",
+    "If you do nothing, return exactly:",
+    "<yukehome_read_without_reply>这次只是安静地想起小榆。</yukehome_read_without_reply>",
+    "No markdown fences. No reasoning. No text outside the message or the read-without-reply tag.",
+  ] : [
     ...(localTime ? [`[${localTime}]`, ""] : []),
     "SYSTEM ACTION MODE: internal trigger, not user chat.",
     "Do any timeline/diary/reminder/whereabouts work in this turn.",

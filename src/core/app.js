@@ -42,6 +42,7 @@ const {
   splitCommandLine,
 } = require("../adapters/runtime/shared/approval-command");
 const { runSystemCheckinPoller } = require("../app/system-checkin-poller");
+const { createYukehomeProactiveDeliveryServer } = require("../app/yukehome-proactive-delivery-server");
 const { createProjectTooling } = require("../tools/create-project-tooling");
 const DEFAULT_LONG_POLL_TIMEOUT_MS = 35_000;
 const MIN_LONG_POLL_TIMEOUT_MS = 2_000;
@@ -86,6 +87,7 @@ class CyberbossApp {
     this.pendingImageInboundByScope = new Map();
     this.turnBoundaryScopeKeys = new Set();
     this.systemMessageDispatcher = null;
+    this.yukehomeProactiveDeliveryServer = null;
     this.streamDelivery = new StreamDelivery({
       channelAdapter: this.channelAdapter,
       sessionStore: this.runtimeAdapter.getSessionStore(),
@@ -151,16 +153,22 @@ class CyberbossApp {
     if (this.config.startWithLocationServer) {
       await this.ensureLocationServerStarted();
     }
+    if (this.config.runtime === "yukehome") {
+      await this.ensureYukehomeProactiveDeliveryServerStarted();
+    }
     console.log("[cyberboss] bridge loop started; waiting for WeChat messages.");
-    if (this.config.startWithCheckin) {
+    if (shouldStartLocalCheckin(this.config)) {
       console.log("[cyberboss] checkin: enabled");
       void runSystemCheckinPoller(this.config).catch((error) => {
         console.error(`[cyberboss] checkin poller stopped: ${error.message}`);
       });
+    } else if (this.config.startWithCheckin && this.config.runtime === "yukehome") {
+      console.log("[cyberboss] checkin: delegated to Yuke Home proactive rules");
     }
 
     const shutdown = createShutdownController(async () => {
       this.clearPendingImageInboundTimers();
+      await this.closeYukehomeProactiveDeliveryServer();
       await this.closeLocationServer();
       await this.runtimeAdapter.close();
     });
@@ -211,6 +219,7 @@ class CyberbossApp {
     } finally {
       shutdown.dispose();
       this.clearPendingImageInboundTimers();
+      await this.closeYukehomeProactiveDeliveryServer();
       await this.closeLocationServer();
       await this.runtimeAdapter.close();
     }
@@ -234,6 +243,58 @@ class CyberbossApp {
       return;
     }
     await this.projectServices.whereabouts.closeServer();
+  }
+
+  async ensureYukehomeProactiveDeliveryServerStarted() {
+    if (this.yukehomeProactiveDeliveryServer) {
+      return this.yukehomeProactiveDeliveryServer;
+    }
+    const server = createYukehomeProactiveDeliveryServer({
+      host: this.config.yukehomeDeliveryHost,
+      port: this.config.yukehomeDeliveryPort,
+      token: this.config.yukehomeToken,
+      deliver: (payload) => this.deliverYukehomeProactiveMessage(payload),
+    });
+    await server.start();
+    this.yukehomeProactiveDeliveryServer = server;
+    console.log(`[cyberboss] proactiveDelivery=http://${server.host}:${server.port}/deliveries`);
+    return server;
+  }
+
+  async closeYukehomeProactiveDeliveryServer() {
+    const server = this.yukehomeProactiveDeliveryServer;
+    this.yukehomeProactiveDeliveryServer = null;
+    if (server) await server.close();
+  }
+
+  async deliverYukehomeProactiveMessage({ deliveryId = "", userId = "", text = "" } = {}) {
+    const account = this.channelAdapter.resolveAccount();
+    const targetUserId = normalizeCommandArgument(userId) || resolvePreferredSenderId({
+      config: this.config,
+      accountId: account.accountId,
+      explicitUser: "",
+      sessionStore: this.runtimeAdapter.getSessionStore(),
+    });
+    if (!targetUserId) throw new Error("cannot resolve proactive WeChat recipient");
+    if (this.config.allowedUserIds.length > 0 && !this.config.allowedUserIds.includes(targetUserId)) {
+      throw new Error("proactive WeChat recipient is not allowed");
+    }
+    const contextToken = this.channelAdapter.getKnownContextTokens()[targetUserId] || "";
+    if (!contextToken) {
+      await this.deferSystemReply({
+        threadId: `yukehome-proactive:${deliveryId}`,
+        userId: targetUserId,
+        text,
+        kind: "system_reply",
+      });
+      return { delivered: false, deferred: true };
+    }
+    return this.streamDelivery.deliverSystemText({
+      deliveryId,
+      userId: targetUserId,
+      text,
+      contextToken,
+    });
   }
 
   handleLocationAccepted(result) {
@@ -1897,7 +1958,11 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-module.exports = { CyberbossApp };
+module.exports = { CyberbossApp, shouldStartLocalCheckin };
+
+function shouldStartLocalCheckin(config) {
+  return config?.startWithCheckin === true && config?.runtime !== "yukehome";
+}
 
 function parseChannelCommand(text) {
   const normalized = typeof text === "string" ? text.trim() : "";

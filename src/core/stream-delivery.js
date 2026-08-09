@@ -391,6 +391,28 @@ class StreamDelivery {
     await this.sendTextWithRetry(state, payload, { kind: "system_reply" });
   }
 
+  async deliverSystemText({ deliveryId = "", userId = "", text = "", contextToken = "" } = {}) {
+    const normalizedUserId = normalizeText(userId);
+    const safeText = sanitizeReplyText(normalizeText(text));
+    if (!normalizedUserId || !safeText) {
+      throw new Error("system delivery requires a user and non-empty text");
+    }
+    const state = {
+      threadId: `yukehome-proactive:${normalizeText(deliveryId) || Date.now()}`,
+      replyTarget: {
+        userId: normalizedUserId,
+        contextToken: normalizeText(contextToken),
+        provider: "system",
+      },
+    };
+    await this.sendTextWithRetry(state, {
+      userId: normalizedUserId,
+      text: safeText,
+      contextToken: normalizeText(contextToken),
+    }, { kind: "system_reply" });
+    return { delivered: true };
+  }
+
   async sendTextWithRetry(state, payload, { kind }) {
     const initialTarget = state.replyTarget;
     try {
@@ -724,7 +746,9 @@ function sanitizeReplyText(plainReplyText) {
 function resolveSystemReplyDelivery(replyText, policy = createSystemReplyPolicy("")) {
   const normalized = normalizeLineEndings(String(replyText || "")).trim();
   if (!normalized) {
-    return { kind: "invalid", reason: "final reply is empty" };
+    return policy.emptyReplyIsSilent
+      ? { kind: "silent" }
+      : { kind: "invalid", reason: "final reply is empty" };
   }
 
   const source = normalizeSystemReplySource(normalized);
@@ -830,11 +854,14 @@ function createSystemReplyPolicy(runtimeId) {
    * only the final result event. For claudecode only, a short natural final text
    * with no code fence, JSON/action fragment, tool marker, or protocol marker is
    * treated as send_message so random check-ins do not disappear when the model
-   * forgets the JSON wrapper.
+   * forgets the JSON wrapper. Yuke Home also has a trusted final-result boundary;
+   * it stores natural assistant text directly and represents a deliberate silent
+   * result as an empty final reply after parsing its read-without-reply marker.
    */
   return {
     runtimeId: normalizedRuntimeId,
-    allowPlainTextSendMessage: normalizedRuntimeId === "claudecode",
+    allowPlainTextSendMessage: ["claudecode", "yukehome"].includes(normalizedRuntimeId),
+    emptyReplyIsSilent: normalizedRuntimeId === "yukehome",
     maxPlainTextLength: 280,
     maxPlainTextLines: 3,
   };

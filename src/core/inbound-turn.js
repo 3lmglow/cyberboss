@@ -54,7 +54,10 @@ function assembleRuntimeTurnText({ prepared, config = {}, visionContext = {} }) 
   const visualItems = Array.isArray(visionContext.items) ? visionContext.items : [];
   const visionErrors = Array.isArray(visionContext.errors) ? visionContext.errors : [];
 
-  if (localTime) {
+  // Yuke Home owns the visible timeline and already supplies current-time
+  // context to its managed main thread. Keeping CyberBoss's inline timestamp
+  // there only turns it into message body text and duplicates the UI clock.
+  if (localTime && normalizeText(config.runtime).toLowerCase() !== "yukehome") {
     lines.push(`[${localTime}]`);
   }
   if (originalText) {

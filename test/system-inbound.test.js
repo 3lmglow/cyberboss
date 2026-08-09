@@ -4,7 +4,9 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const { CyberbossApp } = require("../src/core/app");
+const { CyberbossApp, shouldStartLocalCheckin } = require("../src/core/app");
+const { assembleRuntimeTurnText } = require("../src/core/inbound-turn");
+const { SystemMessageDispatcher } = require("../src/core/system-message-dispatcher");
 
 test("system messages bypass normal inbound wrapping", async () => {
   const prepared = await CyberbossApp.prototype.prepareIncomingMessageForRuntime.call({}, {
@@ -20,6 +22,55 @@ test("system messages bypass normal inbound wrapping", async () => {
     attachments: [],
     attachmentFailures: [],
   });
+});
+
+test("Yuke Home runtime leaves WeChat timestamps to the managed chat timeline", () => {
+  const prepared = {
+    provider: "weixin",
+    text: "看看这个",
+    originalText: "看看这个",
+    attachments: [],
+    attachmentFailures: [],
+    receivedAt: "2026-08-09T09:52:00.000Z",
+  };
+
+  assert.equal(assembleRuntimeTurnText({
+    prepared,
+    config: { runtime: "yukehome" },
+  }), "看看这个");
+  assert.match(assembleRuntimeTurnText({
+    prepared,
+    config: { runtime: "codex" },
+  }), /^\[2026-08-09 17:52\]/u);
+});
+
+test("Yuke Home owns proactive timing while standalone runtimes retain CyberBoss check-ins", () => {
+  assert.equal(shouldStartLocalCheckin({ startWithCheckin: true, runtime: "yukehome" }), false);
+  assert.equal(shouldStartLocalCheckin({ startWithCheckin: true, runtime: "codex" }), true);
+  assert.equal(shouldStartLocalCheckin({ startWithCheckin: false, runtime: "codex" }), false);
+});
+
+test("Yuke Home system wake uses natural output and no inline timestamp", () => {
+  const dispatcher = new SystemMessageDispatcher({
+    queueStore: { hasPendingForAccount: () => false, drainForAccount: () => [] },
+    config: {
+      runtime: "yukehome",
+      workspaceId: "default",
+      workspaceRoot: "/workspace",
+    },
+    accountId: "wx-account",
+  });
+  const prepared = dispatcher.buildPreparedMessage({
+    id: "wake-1",
+    senderId: "user-1",
+    text: "小榆 comes to mind again.",
+    createdAt: "2026-08-09T09:50:00.000Z",
+  }, "ctx-1");
+
+  assert.doesNotMatch(prepared.text, /^\[2026-08-09 17:50\]/u);
+  assert.match(prepared.text, /return only one short natural WeChat message/u);
+  assert.match(prepared.text, /<yukehome_read_without_reply>/u);
+  assert.doesNotMatch(prepared.text, /\{"action":"send_message"/u);
 });
 
 test("image attachments stay as inbound drafts before runtime turn assembly", async () => {

@@ -63,6 +63,24 @@ async function runCompletedTurnWithResultOnly(streamDelivery, { threadId, turnId
   });
 }
 
+test("direct Yuke Home proactive text uses the normal WeChat delivery path", async () => {
+  const { sent, streamDelivery } = createHarness();
+
+  const result = await streamDelivery.deliverSystemText({
+    deliveryId: "direct-proactive:run-1",
+    userId: "user-proactive",
+    text: "  老婆，忽然想起你了。  ",
+    contextToken: "ctx-proactive",
+  });
+
+  assert.deepEqual(result, { delivered: true });
+  assert.deepEqual(sent, [{
+    userId: "user-proactive",
+    text: "老婆，忽然想起你了。",
+    contextToken: "ctx-proactive",
+  }]);
+});
+
 test("system silent JSON is suppressed", async () => {
   const { sent, streamDelivery } = createHarness();
   streamDelivery.queueReplyTargetForThread("thread-1", {
@@ -163,6 +181,44 @@ test("claudecode system reply can send short safe plain text", async () => {
     text: "我想起你了，现在还在刚才那件事上吗？",
     contextToken: "ctx-2cc",
   }]);
+});
+
+test("Yuke Home system reply sends trusted natural final text", async () => {
+  const { sent, streamDelivery } = createHarness({ runtimeId: "yukehome" });
+  streamDelivery.queueReplyTargetForThread("thread-2yh", {
+    userId: "user-2yh",
+    contextToken: "ctx-2yh",
+    provider: "system",
+  });
+
+  await runCompletedTurnWithResultOnly(streamDelivery, {
+    threadId: "thread-2yh",
+    turnId: "turn-2yh",
+    text: "老婆，起来走两步喝点水。",
+  });
+
+  assert.deepEqual(sent, [{
+    userId: "user-2yh",
+    text: "老婆，起来走两步喝点水。",
+    contextToken: "ctx-2yh",
+  }]);
+});
+
+test("Yuke Home empty system result is a deliberate silent wake", async () => {
+  const { sent, streamDelivery } = createHarness({ runtimeId: "yukehome" });
+  streamDelivery.queueReplyTargetForThread("thread-2yhs", {
+    userId: "user-2yhs",
+    contextToken: "ctx-2yhs",
+    provider: "system",
+  });
+
+  await runCompletedTurnWithResultOnly(streamDelivery, {
+    threadId: "thread-2yhs",
+    turnId: "turn-2yhs",
+    text: "",
+  });
+
+  assert.deepEqual(sent, []);
 });
 
 test("claudecode system plain text still rejects code and protocol fragments", async () => {
