@@ -91,7 +91,7 @@ Cyberboss builds on top of `timeline-for-agent`, then adds WeChat, reminders, di
 
 Set `CYBERBOSS_RUNTIME=yukehome` to keep Cyberboss as the full WeChat, queue, check-in, media, diary, reminder, timeline, sticker, file, and location system while Yuke Home owns the canonical model thread. Every Cyberboss turn resolves Yuke Home's current main conversation, is saved through the same history and identity-rebuild path, and receives only the response stream for that turn. Replies started in the Yuke Home UI are never mirrored to WeChat.
 
-The Yuke Home Codex App Server remains the only model-process owner. Register Cyberboss's existing tool host there with `scripts/configure-yukehome-codex-mcp.js`; this avoids an unsupported shared raw WebSocket transport and keeps the native Cyberboss tools available to the shared brain.
+The Yuke Home Codex App Server remains the only model-process owner. Register Cyberboss's existing tool host there with `scripts/configure-yukehome-codex-mcp.js`; this avoids an unsupported shared raw WebSocket transport. The managed-main registration deliberately exposes only reminders, WeChat file delivery, and stickers. Diary, timeline, whereabouts, and internal system-trigger implementations remain available to Cyberboss's other runtime modes without adding duplicate life-storage tools to Yuke Home's shared brain.
 
 ## Why It Exists
 
@@ -439,7 +439,7 @@ This is the runtime state directory, not your project workspace. The WeChat thre
 ### Sticker Notes
 
 - On the current WeChat bridge path, do not rely on animated playback for inbound or outbound stickers. A GIF may still show up as a static image in chat.
-- Because of that, saved stickers are currently normalized to GIF at intake so the asset format is already aligned if WeChat later opens a fuller sticker capability.
+- Because of that, saved stickers are currently normalized to 240 x 240 GIF at intake through the cross-platform Sharp runtime, so the asset format is already aligned if WeChat later opens a fuller sticker capability.
 - The tag catalog lives at `${HOME}/.cyberboss/stickers/tags.json`. The AI reads from it, and users can edit it directly.
 - For now, sticker retrieval is tag-filtered only. There is no vector-database recall layer.
 

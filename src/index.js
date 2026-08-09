@@ -142,7 +142,13 @@ async function main() {
   if (command === "tool-mcp-server") {
     const runtimeId = readFlagValue(argv.slice(1), "--runtime-id") || "";
     const workspaceRoot = readFlagValue(argv.slice(1), "--workspace-root") || process.cwd();
-    const { toolHost } = createProjectTooling(config);
+    const enabledToolTopics = readFlagValue(argv.slice(1), "--tool-topics")
+      .split(",")
+      .map((topic) => topic.trim())
+      .filter(Boolean);
+    const { toolHost } = createProjectTooling(config, {
+      enabledToolTopics: enabledToolTopics.length ? enabledToolTopics : undefined,
+    });
     runToolMcpServer({ toolHost, runtimeId, workspaceRoot });
     return;
   }

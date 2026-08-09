@@ -6,18 +6,23 @@ const {
 } = require("../services/sticker-service");
 
 class ProjectToolHost {
-  constructor({ services, runtimeContextStore }) {
+  constructor({ services, runtimeContextStore, enabledTopics }) {
     this.services = services;
     this.runtimeContextStore = runtimeContextStore;
-    this.extraToolHosts = createExtraToolHosts(services);
+    this.enabledTopics = normalizeEnabledTopics(enabledTopics);
+    this.extraToolHosts = this.isTopicEnabled("whereabouts")
+      ? createExtraToolHosts(services)
+      : [];
   }
 
   listTools() {
-    const builtIn = PROJECT_TOOLS.map((tool) => ({
-      name: tool.name,
-      description: buildToolDescription(tool),
-      inputSchema: tool.inputSchema,
-    }));
+    const builtIn = PROJECT_TOOLS
+      .filter((tool) => this.isToolEnabled(tool))
+      .map((tool) => ({
+        name: tool.name,
+        description: buildToolDescription(tool),
+        inputSchema: tool.inputSchema,
+      }));
     const extra = this.extraToolHosts.flatMap((host) => host.listTools());
     return [...builtIn, ...extra];
   }
@@ -25,7 +30,7 @@ class ProjectToolHost {
   async invokeTool(toolName, args = {}, context = {}) {
     const spec = PROJECT_TOOLS.find((candidate) => candidate.name === toolName);
     const normalizedArgs = args && typeof args === "object" ? args : {};
-    if (spec) {
+    if (spec && this.isToolEnabled(spec)) {
       validateSchema(spec.inputSchema, normalizedArgs, toolName, "input");
       const resolvedContext = this.resolveContext(context);
       return await spec.handler({
@@ -40,6 +45,15 @@ class ProjectToolHost {
       }
     }
     throw new Error(`Unknown tool: ${toolName}`);
+  }
+
+  isToolEnabled(tool) {
+    return !this.enabledTopics
+      || tool.topics.some((topic) => this.enabledTopics.has(topic));
+  }
+
+  isTopicEnabled(topic) {
+    return !this.enabledTopics || this.enabledTopics.has(topic);
   }
 
   resolveContext(context = {}) {
@@ -549,6 +563,27 @@ const PROJECT_TOOLS = [
 const STATIC_EXTRA_TOOL_NAMES = new WhereaboutsToolHost({ service: null })
   .listTools()
   .map((tool) => tool.name);
+
+function normalizeEnabledTopics(topics) {
+  if (topics === undefined || topics === null) {
+    return null;
+  }
+  const normalized = new Set(
+    (Array.isArray(topics) ? topics : [topics])
+      .map((topic) => normalizeText(topic).toLowerCase())
+      .filter(Boolean),
+  );
+  const known = new Set([
+    ...PROJECT_TOOLS.flatMap((tool) => tool.topics),
+    "whereabouts",
+  ]);
+  for (const topic of normalized) {
+    if (!known.has(topic)) {
+      throw new Error(`Unknown Cyberboss tool topic: ${topic}`);
+    }
+  }
+  return normalized;
+}
 
 function createExtraToolHosts(services = {}) {
   const hosts = [];
