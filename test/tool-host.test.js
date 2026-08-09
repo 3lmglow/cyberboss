@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const { ProjectToolHost } = require("../src/tools/tool-host");
 
-function createHost() {
+function createHost(options = {}) {
   return new ProjectToolHost({
     services: {
       diary: {
@@ -193,8 +193,29 @@ function createHost() {
         return {};
       },
     },
+    ...options,
   });
 }
+
+test("tool host can expose only the Yuke Home WeChat capability topics", async () => {
+  const host = createHost({
+    enabledTopics: ["reminder", "channel", "sticker"],
+  });
+  assert.deepEqual(host.listTools().map((tool) => tool.name), [
+    "cyberboss_reminder_create",
+    "cyberboss_channel_send_file",
+    "cyberboss_sticker_tags",
+    "cyberboss_sticker_pick",
+    "cyberboss_sticker_send",
+    "cyberboss_sticker_delete",
+    "cyberboss_sticker_save_from_inbox",
+    "cyberboss_sticker_update",
+  ]);
+  await assert.rejects(
+    host.invokeTool("cyberboss_diary_append", { text: "hidden" }),
+    /Unknown tool/u,
+  );
+});
 
 test("tool host rejects legacy timeline write CLI-shaped fields", async () => {
   const host = createHost();

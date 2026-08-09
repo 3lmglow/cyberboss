@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
+  YUKEHOME_TOOL_TOPICS,
   renderSection,
   upsertSection,
 } = require("../scripts/configure-yukehome-codex-mcp");
@@ -18,6 +19,7 @@ test("renders the existing CyberBoss tool host as a required MCP server", () => 
   assert.match(section, /\[mcp_servers\.cyberboss_tools\]/u);
   assert.match(section, /tool-mcp-server/u);
   assert.match(section, /--state-dir/u);
+  assert.match(section, new RegExp(`--tool-topics.*${YUKEHOME_TOOL_TOPICS.join(",")}`, "u"));
   assert.match(section, /required = true/u);
 });
 

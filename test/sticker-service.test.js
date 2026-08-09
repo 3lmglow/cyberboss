@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const sharp = require("sharp");
 
 const { saveWeixinAccount } = require("../src/adapters/channel/weixin/account-store");
 const { persistContextToken } = require("../src/adapters/channel/weixin/context-token-store");
@@ -14,6 +15,8 @@ const {
   loadStickerIndexSync,
 } = require("../src/services/sticker-service");
 
+const PROJECT_ROOT = path.resolve(__dirname, "..");
+
 function createConfig(overrides = {}) {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "cyberboss-sticker-test-"));
   const stickersDir = path.join(stateDir, "stickers");
@@ -23,10 +26,10 @@ function createConfig(overrides = {}) {
     stickerAssetsDir: path.join(stickersDir, "assets"),
     stickersIndexFile: path.join(stickersDir, "index.json"),
     stickerTagsFile: path.join(stickersDir, "tags.json"),
-    stickersTemplateDir: path.join("/Users/tingyiwen/Dev/cyberboss", "templates", "stickers"),
-    stickersTemplateIndexFile: path.join("/Users/tingyiwen/Dev/cyberboss", "templates", "stickers", "index.json"),
-    stickerTagsTemplateFile: path.join("/Users/tingyiwen/Dev/cyberboss", "templates", "stickers", "tags.json"),
-    stickerNormalizeGifScript: path.join("/Users/tingyiwen/Dev/cyberboss", "scripts", "normalize-sticker-gif.js"),
+    stickersTemplateDir: path.join(PROJECT_ROOT, "templates", "stickers"),
+    stickersTemplateIndexFile: path.join(PROJECT_ROOT, "templates", "stickers", "index.json"),
+    stickerTagsTemplateFile: path.join(PROJECT_ROOT, "templates", "stickers", "tags.json"),
+    stickerNormalizeGifScript: path.join(PROJECT_ROOT, "scripts", "normalize-sticker-gif.js"),
     accountsDir: path.join(stateDir, "accounts"),
     weixinBaseUrl: "https://ilinkai.weixin.qq.com",
     workspaceId: "default",
@@ -39,7 +42,7 @@ function writeInboxPng(config, fileName = "cat.png") {
   const inboxDir = path.join(config.stateDir, "inbox", "2026-04-29");
   fs.mkdirSync(inboxDir, { recursive: true });
   const filePath = path.join(inboxDir, fileName);
-  const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==";
+  const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
   fs.writeFileSync(filePath, Buffer.from(pngBase64, "base64"));
   return filePath;
 }
@@ -159,6 +162,10 @@ test("sticker service saves inbox images as GIF stickers, grows tags, dedupes, a
   assert.equal(firstItem.created, true);
   assert.equal(path.extname(firstItem.filePath), ".gif");
   assert.ok(fs.existsSync(firstItem.filePath));
+  const gifMetadata = await sharp(firstItem.filePath).metadata();
+  assert.equal(gifMetadata.format, "gif");
+  assert.equal(gifMetadata.width, 240);
+  assert.equal(gifMetadata.height, 240);
   assert.equal(loadStickerIndexSync(config)[firstItem.stickerId].desc, "小猫贴脸蹭蹭，撒娇示爱");
   assert.equal(loadStickerIndexSync(config)[firstItem.stickerId].tags.includes("夸夸"), true);
   assert.equal(loadStickerTagsSync(config).includes("夸夸"), true);
