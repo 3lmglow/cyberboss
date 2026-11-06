@@ -1000,6 +1000,22 @@ class CyberbossApp {
 
   async flushManagedReminders(account) {
     const queue = this.reminderQueue;
+    try {
+      const pickups = await this.runtimeAdapter.pickupReminders();
+      if (pickups.length) {
+        // Yuke Home has one owner. Never infer a recipient from the most
+        // recent chat or arbitrarily choose from multiple allowed accounts.
+        const allowed = this.config.allowedUserIds || [];
+        const senderId = allowed.length > 1 ? "" : resolvePreferredSenderId({config:this.config,
+          accountId:account.accountId,sessionStore:this.runtimeAdapter.getSessionStore()});
+        const contextToken = senderId && this.channelAdapter.getKnownContextTokens()[senderId];
+        if (contextToken) queue.importPickups(pickups.map(r => ({id:r.id,text:r.text,dueAtMs:r.due_at,
+          senderId,accountId:account.accountId,contextToken})));
+      }
+    } catch {
+      // A failed pickup must never strand addressed, already durable timers.
+      console.warn("[cyberboss] reminder pickup unavailable");
+    }
     await Promise.all(queue.listChecks(account.accountId, Date.now()).map(async item => {
       // Register even future timers. The next real reply can then pick one
       // up exactly when due without waiting for another WeChat poll.

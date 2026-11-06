@@ -147,6 +147,7 @@ async function main() {
       .map((topic) => topic.trim())
       .filter(Boolean);
     const { toolHost } = createProjectTooling(config, {
+      runtimeId,
       enabledToolTopics: enabledToolTopics.length ? enabledToolTopics : undefined,
     });
     runToolMcpServer({ toolHost, runtimeId, workspaceRoot });

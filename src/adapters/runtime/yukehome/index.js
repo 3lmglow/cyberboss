@@ -90,6 +90,11 @@ function createYukehomeRuntimeAdapter(config, options = {}) {
       return { nativeImageInput: true, toolImageRead: false };
     },
     initialize,
+    async pickupReminders() {
+      const data = await requestJson("/internal/cyberboss/reminders/pickup");
+      if (!Array.isArray(data.reminders)) throw new Error("invalid reminder pickup");
+      return data.reminders;
+    },
     resolveReminder(reminder) {
       // Addressing and WeChat credentials stay here. Only the scheduled fact
       // and its stable ID go to the authenticated, shared main conversation.

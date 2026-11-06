@@ -32,15 +32,20 @@ class ReminderQueueStore {
     }
   }
 
-  insert(db, reminder) {
+  insert(db, reminder, ifAbsent = false) {
     const normalized = normalizeReminder(reminder);
     if (!normalized) throw new Error("invalid reminder");
-    db.prepare("INSERT INTO reminders(id,account,due,check_at,payload) VALUES(?,?,?,?,?)")
+    db.prepare("INSERT INTO reminders(id,account,due,check_at,payload) VALUES(?,?,?,?,?)" + (ifAbsent ? " ON CONFLICT(id) DO NOTHING" : ""))
       .run(normalized.id, normalized.accountId, normalized.dueAtMs, 0, JSON.stringify(normalized));
     return normalized;
   }
 
   enqueue(reminder) { return this.transaction(db => this.insert(db, reminder)); }
+  importPickups(reminders) {
+    return this.transaction(db => {
+      for (const item of reminders) this.insert(db,item,true);
+    });
+  }
 
   listDue(nowMs, account) {
     return this.transaction(db => db.prepare("DELETE FROM reminders WHERE account=? AND due<=? AND sending=0 RETURNING payload")
@@ -48,8 +53,13 @@ class ReminderQueueStore {
   }
 
   listChecks(account, nowMs) {
-    return this.transaction(db => db.prepare("SELECT payload FROM reminders WHERE account=? AND sending=0 AND check_at<=? ORDER BY due,id LIMIT 16")
-      .all(account, nowMs).map(r => JSON.parse(r.payload)));
+    return this.transaction(db => {
+      // Keep terminal receipts beyond the three-hour validity window even
+      // across restart, then retire them; an ambiguous send is never replayed.
+      db.prepare("DELETE FROM reminders WHERE account=? AND sending=2 AND due<?").run(account, nowMs-86400_000);
+      return db.prepare("SELECT payload FROM reminders WHERE account=? AND sending=0 AND check_at<=? ORDER BY due,id LIMIT 16")
+        .all(account, nowMs).map(r => JSON.parse(r.payload));
+    });
   }
 
   retryAt(id, at) {
@@ -63,7 +73,7 @@ class ReminderQueueStore {
       .run(JSON.stringify(item), at, item.id));
   }
   finish(id) {
-    this.transaction(db => db.prepare("DELETE FROM reminders WHERE id=?").run(id));
+    this.transaction(db => db.prepare("UPDATE reminders SET sending=2,payload='{}' WHERE id=?").run(id));
   }
   peekNextDueAtMs(account, managed) {
     return this.transaction(db => db.prepare(`SELECT min(${managed ? "max(check_at,1)" : "due"}) AS t FROM reminders WHERE account=? AND sending=0`)

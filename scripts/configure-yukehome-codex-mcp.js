@@ -3,7 +3,7 @@ const fs = require("fs/promises");
 const path = require("path");
 
 const SECTION_NAME = "mcp_servers.cyberboss_tools";
-const YUKEHOME_TOOL_TOPICS = ["reminder", "channel", "sticker"];
+const YUKEHOME_TOOL_TOPICS = ["channel", "sticker"];
 
 function configError(code, message) {
   const error = new Error(message);

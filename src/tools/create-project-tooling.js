@@ -48,6 +48,7 @@ function createProjectTooling(config, options = {}) {
     }),
   };
   const toolHost = new ProjectToolHost({
+    managedMain: (options.runtimeId || config.runtime) === "yukehome",
     services,
     runtimeContextStore,
     enabledTopics: options.enabledToolTopics,

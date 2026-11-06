@@ -6,8 +6,9 @@ const {
 } = require("../services/sticker-service");
 
 class ProjectToolHost {
-  constructor({ services, runtimeContextStore, enabledTopics }) {
+  constructor({ services, runtimeContextStore, enabledTopics, managedMain = false }) {
     this.services = services;
+    this.managedMain = managedMain;
     this.runtimeContextStore = runtimeContextStore;
     this.enabledTopics = normalizeEnabledTopics(enabledTopics);
     this.extraToolHosts = this.isTopicEnabled("whereabouts")
@@ -48,6 +49,7 @@ class ProjectToolHost {
   }
 
   isToolEnabled(tool) {
+    if (this.managedMain && tool.name === "cyberboss_reminder_create") return false;
     return !this.enabledTopics
       || tool.topics.some((topic) => this.enabledTopics.has(topic));
   }
@@ -108,7 +110,7 @@ const PROJECT_TOOLS = [
   },
   {
     name: "cyberboss_reminder_create",
-    description: "Schedule a reminder. With Yuke Home it reaches the next real chat reply while the user is talking; only a quiet conversation gets a dedicated WeChat reminder.",
+    description: "Schedule a WeChat reminder in standalone CyberBoss.",
     shortHint: "Create a reminder with direct text plus delayMinutes or dueAt.",
     topics: ["reminder"],
     inputSchema: {

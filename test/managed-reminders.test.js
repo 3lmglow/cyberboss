@@ -27,7 +27,7 @@ test("managed resolution keeps pending, retires chat receipts and never replays 
   const {store,item}=fixture(t);
   const sent=[];
   const app={config:{allowedUserIds:["target"]},reminderQueue:store(),
-    runtimeAdapter:{resolveReminder:async()=>({status:"pending"})},
+    runtimeAdapter:{pickupReminders:async()=>[],resolveReminder:async()=>({status:"pending"})},
     channelAdapter:{getKnownContextTokens:()=>({target:"current-token"}),
       sendText:async delivery=>{sent.push(delivery);throw new Error("lost acknowledgement");}}};
   const sweep=()=>CyberbossApp.prototype.flushManagedReminders.call(app,{accountId:"a"});
@@ -51,7 +51,7 @@ test("register a future timer before it is due; no real reply or unsolicited sta
   queue.enqueue({...item,id:"future",dueAtMs});
   const seen=[];
   await CyberbossApp.prototype.flushManagedReminders.call({config:{},reminderQueue:queue,
-    runtimeAdapter:{async resolveReminder(r){seen.push(r.id);return {status:"pending"};}},
+    runtimeAdapter:{pickupReminders:async()=>[],async resolveReminder(r){seen.push(r.id);return {status:"pending"};}},
     deliverYukehomeProactiveMessage:()=>assert.fail("unexpected send")},{accountId:"a"});
   assert.deepEqual(seen,["future"]);
   assert.equal(queue.peekNextDueAtMs("a",true),dueAtMs);
@@ -59,10 +59,24 @@ test("register a future timer before it is due; no real reply or unsolicited sta
 
 test("an explicit first-chunk rejection can retry after restart, an unknown result cannot", async t=>{
   const {store}=fixture(t), queue=store();
-  const app={config:{},reminderQueue:queue,runtimeAdapter:{resolveReminder:async()=>({status:"deliver",text:"authored。"})},
+  const app={config:{},reminderQueue:queue,runtimeAdapter:{pickupReminders:async()=>[],resolveReminder:async()=>({status:"deliver",text:"authored。"})},
     channelAdapter:{getKnownContextTokens:()=>({target:"token"}),
       sendText:async()=>{throw Object.assign(new Error("rejected"),{knownNotSent:true});}}};
   await CyberbossApp.prototype.flushManagedReminders.call(app,{accountId:"a"});
   assert.deepEqual(store().listChecks("a",Date.now()+120_000).map(r=>r.id),["one"]);
   assert.deepEqual(store().listChecks("a",Date.now()),[]);
+});
+
+test("explicit pickups bind before resolving; a stale duplicate or restart cannot send a second time", async t=>{
+  const {store}=fixture(t), queue=store();queue.finish("one");
+  const item={id:"explicit",text:"约好走微信",due_at:Date.now()-1000};
+  const sent=[];
+  const app={config:{allowedUserIds:["target"]},reminderQueue:queue,
+    runtimeAdapter:{pickupReminders:async()=>[item],getSessionStore:()=>null,
+      resolveReminder:async record=>{assert.equal(record.senderId,"target");return {status:"deliver",text:"原话。"};}},
+    channelAdapter:{getKnownContextTokens:()=>({target:"token"}),sendText:async d=>sent.push(d)}};
+  const sweep=()=>CyberbossApp.prototype.flushManagedReminders.call(app,{accountId:"a"});
+  app.config.allowedUserIds.push("other");await sweep();assert.equal(sent.length,0);
+  app.config.allowedUserIds.pop();await sweep();app.reminderQueue=store();await sweep();
+  assert.deepEqual(sent.map(r=>[r.userId,r.deliveryId,r.text]),[["target","explicit","原话。"]]);
 });

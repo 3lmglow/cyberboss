@@ -199,10 +199,10 @@ function createHost(options = {}) {
 
 test("tool host can expose only the Yuke Home WeChat capability topics", async () => {
   const host = createHost({
+    managedMain:true,
     enabledTopics: ["reminder", "channel", "sticker"],
   });
   assert.deepEqual(host.listTools().map((tool) => tool.name), [
-    "cyberboss_reminder_create",
     "cyberboss_channel_send_file",
     "cyberboss_sticker_tags",
     "cyberboss_sticker_pick",
@@ -215,6 +215,7 @@ test("tool host can expose only the Yuke Home WeChat capability topics", async (
     host.invokeTool("cyberboss_diary_append", { text: "hidden" }),
     /Unknown tool/u,
   );
+  await assert.rejects(host.invokeTool("cyberboss_reminder_create",{text:"old managed route"}),/Unknown tool/u);
 });
 
 test("tool host rejects legacy timeline write CLI-shaped fields", async () => {
