@@ -954,7 +954,7 @@ class CyberbossApp {
       return MIN_LONG_POLL_TIMEOUT_MS;
     }
 
-    const nextDueAtMs = this.reminderQueue.peekNextDueAtMs();
+    const nextDueAtMs = this.reminderQueue.peekNextDueAtMs(this.activeAccountId, this.config.runtime === "yukehome");
     if (!nextDueAtMs) {
       return DEFAULT_LONG_POLL_TIMEOUT_MS;
     }
@@ -967,9 +967,17 @@ class CyberbossApp {
   }
 
   async flushDueReminders(account) {
-    const dueReminders = this.reminderQueue
-      .listDue(Date.now())
-      .filter((reminder) => reminder.accountId === account.accountId);
+    if (this.config.runtime === "yukehome") {
+      // A quiet wake can take minutes. Keep polling for real incoming
+      // messages while it runs, so the user can still take the floor.
+      if (!this.reminderSweep) {
+        this.reminderSweep = this.flushManagedReminders(account)
+          .catch(() => console.warn("[cyberboss] reminder outbox unavailable"))
+          .finally(() => { this.reminderSweep = null; });
+      }
+      return;
+    }
+    const dueReminders = this.reminderQueue.listDue(Date.now(), account.accountId);
 
     for (const reminder of dueReminders) {
       try {
@@ -988,6 +996,39 @@ class CyberbossApp {
         });
       }
     }
+  }
+
+  async flushManagedReminders(account) {
+    const queue = this.reminderQueue;
+    await Promise.all(queue.listChecks(account.accountId, Date.now()).map(async item => {
+      // Register even future timers. The next real reply can then pick one
+      // up exactly when due without waiting for another WeChat poll.
+      try {
+        if (this.config.allowedUserIds?.length && !this.config.allowedUserIds.includes(item.senderId)) {
+          queue.retryAt(item.id, Date.now()+60_000);
+          return;
+        }
+        const outcome = await this.runtimeAdapter.resolveReminder(item);
+        if (outcome.status === "handled") { queue.finish(item.id); return; }
+        if (outcome.status === "deliver" && typeof outcome.text === "string" && outcome.text.trim()) {
+          const contextToken = this.channelAdapter.getKnownContextTokens()[item.senderId];
+          if (!contextToken) { queue.retryAt(item.id, Date.now()+15_000); return; }
+          // Persist the boundary BEFORE external delivery. An ambiguous
+          // result (including a process crash) is never automatically resent.
+          if (!queue.claimDelivery(item.id)) return;
+          await this.channelAdapter.sendText({ userId: item.senderId, text: outcome.text, contextToken, preserveBlock: true, deliveryId: item.id });
+          queue.finish(item.id);
+          return;
+        }
+        if (outcome.status !== "pending") throw new Error("invalid reminder disposition");
+        queue.retryAt(item.id, Math.max(item.dueAtMs, Date.now()+15_000));
+      } catch (error) {
+        // Safe to repeat resolution, never a send whose outcome is unknown.
+        if (error.knownNotSent) queue.retryRejected(item, Date.now()+60_000);
+        else queue.retryAt(item.id, Date.now()+15_000);
+        console.warn("[cyberboss] reminder resolution or delivery unconfirmed");
+      }
+    }));
   }
 
   resolveReminderWorkspaceRoot(reminder) {
@@ -1591,7 +1632,7 @@ class CyberbossApp {
       }
       try {
         this.turnGateStore.releaseThread(event.payload.threadId);
-        if (event.type === "runtime.turn.failed") {
+        if (event.type === "runtime.turn.failed" && event.payload.originKind !== "system" && failureReplyTarget?.provider !== "system") {
           await this.sendFailureToThread(
             event.payload.threadId,
             event.payload.text || "❌ Execution failed",

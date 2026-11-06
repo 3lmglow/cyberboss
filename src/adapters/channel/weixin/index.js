@@ -59,7 +59,7 @@ function createWeixinChannelAdapter(config) {
     return ensureContextTokenCache()[normalizedUserId] || "";
   }
 
-  function sendTextChunks({ userId, text, contextToken = "", preserveBlock = false }) {
+  function sendTextChunks({ userId, text, contextToken = "", preserveBlock = false, deliveryId = "" }) {
     const account = ensureAccount();
     const resolvedToken = resolveContextToken(userId, contextToken);
     if (!resolvedToken) {
@@ -80,14 +80,20 @@ function createWeixinChannelAdapter(config) {
       );
     return sendChunks.reduce((promise, chunk, index) => promise
       .then(() => {
-        const deliveryChunk = finalizeWeixinDeliveryChunk(chunk) || "Completed.";
+        // A committed reminder is already Lumen's final message; only split
+        // at the transport's byte limit, never rewrite its punctuation.
+        const deliveryChunk = deliveryId ? chunk : (finalizeWeixinDeliveryChunk(chunk) || "Completed.");
         return sendText({
           baseUrl: account.baseUrl,
           token: account.token,
           toUserId: userId,
           text: deliveryChunk,
           contextToken: resolvedToken,
-          clientId: `cb-${crypto.randomUUID()}`,
+          clientId: deliveryId ? `cb-${deliveryId}-${index}` : `cb-${crypto.randomUUID()}`,
+        }).catch(error => {
+          // Only an explicit rejection of the FIRST chunk proves nothing was sent.
+          if (deliveryId && index === 0 && error.code === "weixin_send_rejected") error.knownNotSent = true;
+          throw error;
         });
       })
       .then(() => {
@@ -167,8 +173,8 @@ function createWeixinChannelAdapter(config) {
       const account = ensureAccount();
       return inboundFilter.normalize(message, config, account.accountId);
     },
-    async sendText({ userId, text, contextToken = "", preserveBlock = false }) {
-      await sendTextChunks({ userId, text, contextToken, preserveBlock });
+    async sendText({ userId, text, contextToken = "", preserveBlock = false, deliveryId = "" }) {
+      await sendTextChunks({ userId, text, contextToken, preserveBlock, deliveryId });
     },
     async sendTyping({ userId, status = 1, contextToken = "" }) {
       const account = ensureAccount();

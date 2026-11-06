@@ -90,6 +90,13 @@ function createYukehomeRuntimeAdapter(config, options = {}) {
       return { nativeImageInput: true, toolImageRead: false };
     },
     initialize,
+    resolveReminder(reminder) {
+      // Addressing and WeChat credentials stay here. Only the scheduled fact
+      // and its stable ID go to the authenticated, shared main conversation.
+      return requestJson("/internal/cyberboss/reminders/resolve", { method: "POST",
+        body: JSON.stringify({ id: reminder.id, due_at: reminder.dueAtMs, text: reminder.text }),
+      }, 45_000);
+    },
     async close() {
       const active = Array.from(activeTurns.keys());
       await Promise.allSettled(active.map((turnId) => this.cancelTurn({ turnId })));
@@ -156,11 +163,11 @@ function createYukehomeRuntimeAdapter(config, options = {}) {
 
       emit({ type: "runtime.turn.started", payload: { threadId, turnId } });
       const completion = consumeNdjsonEvents(response.body, (packet) => {
-        mapBridgePacketToRuntimeEvents(packet, { threadId, turnId }).forEach(emit);
+        mapBridgePacketToRuntimeEvents(packet, { threadId, turnId, originKind:body.origin_kind }).forEach(emit);
       }).catch((error) => {
         emit({
           type: "runtime.turn.failed",
-          payload: { threadId, turnId, text: error instanceof Error ? error.message : String(error) },
+          payload: { threadId, turnId, originKind:body.origin_kind, text: error instanceof Error ? error.message : String(error) },
         });
       }).finally(() => {
         activeTurns.delete(turnId);
@@ -249,7 +256,7 @@ function emitPacketLine(line, onPacket) {
   onPacket(packet);
 }
 
-function mapBridgePacketToRuntimeEvents(packet, { threadId, turnId }) {
+function mapBridgePacketToRuntimeEvents(packet, { threadId, turnId, originKind }) {
   const event = normalizeText(packet?.event);
   const data = packet?.data || {};
   if (event === "text_delta" && data.text) {
@@ -287,7 +294,7 @@ function mapBridgePacketToRuntimeEvents(packet, { threadId, turnId }) {
   if (event === "error") {
     return [{
       type: "runtime.turn.failed",
-      payload: { threadId, turnId, text: normalizeText(data.error) || "Yuke Home turn failed" },
+      payload: { threadId, turnId, ...(originKind ? {originKind} : {}), text: normalizeText(data.error) || "Yuke Home turn failed" },
     }];
   }
   return [];

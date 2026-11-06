@@ -98,7 +98,8 @@ async function sendMessage({ baseUrl, token, body, timeoutMs }) {
   const errcode = parsed?.errcode;
   if ((ret !== undefined && ret !== 0) || (errcode !== undefined && errcode !== 0)) {
     const errmsg = typeof parsed?.errmsg === "string" ? parsed.errmsg.trim() : "";
-    throw new Error(`sendMessage ret=${ret ?? ""} errcode=${errcode ?? ""} errmsg=${redactSensitiveText(errmsg)}`);
+    throw Object.assign(new Error(`sendMessage ret=${ret ?? ""} errcode=${errcode ?? ""} errmsg=${redactSensitiveText(errmsg)}`),
+      {code:"weixin_send_rejected"});
   }
   return parsed;
 }
@@ -214,11 +215,10 @@ async function sendText({ baseUrl, token, toUserId, text, contextToken, clientId
   if (!itemList.length) {
     throw new Error("weixin sendText requires non-empty text");
   }
-  const raw = await apiPost({
+  return sendMessage({
     baseUrl,
-    endpoint: "ilink/bot/sendmessage",
     token,
-    body: JSON.stringify({
+    body: {
       msg: {
         from_user_id: "",
         to_user_id: toUserId,
@@ -228,18 +228,8 @@ async function sendText({ baseUrl, token, toUserId, text, contextToken, clientId
         item_list: itemList,
         context_token: contextToken,
       },
-      base_info: buildBaseInfo(),
-    }),
-    label: "sendMessage",
+    },
   });
-  const parsed = parseJson(raw, "sendMessage");
-  const ret = parsed?.ret;
-  const errcode = parsed?.errcode;
-  if ((ret !== undefined && ret !== 0) || (errcode !== undefined && errcode !== 0)) {
-    const errmsg = typeof parsed?.errmsg === "string" ? parsed.errmsg.trim() : "";
-    throw new Error(`sendMessage ret=${ret ?? ""} errcode=${errcode ?? ""} errmsg=${redactSensitiveText(errmsg)}`);
-  }
-  return parsed;
 }
 
 module.exports = {

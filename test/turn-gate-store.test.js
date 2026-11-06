@@ -512,6 +512,11 @@ test("failed turns still send error back when thread binding lookup is missing",
     text: "❌ Execution failed\ncontext window exceeded",
     contextToken: "ctx-1",
   }]);
+  appLike.streamDelivery.resolveReplyTargetForRun = () => ({userId:"user-1",contextToken:"ctx-1",provider:"system"});
+  await CyberbossApp.prototype.handleRuntimeEvent.call(appLike, {
+    type:"runtime.turn.failed",payload:{threadId:"thread-1",turnId:"wake",text:"chat_runtime_turn_in_progress"},
+  });
+  assert.equal(sent.length,1,"a background failure must not turn into another WeChat message");
 });
 
 test("flushPendingInboundMessages batches queued messages from the same scope into one turn", async () => {

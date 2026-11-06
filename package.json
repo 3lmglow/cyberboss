@@ -10,7 +10,7 @@
     "cyberboss": "./bin/cyberboss.js"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "scripts": {
     "start": "node ./bin/cyberboss.js start",

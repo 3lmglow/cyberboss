@@ -108,7 +108,7 @@ const PROJECT_TOOLS = [
   },
   {
     name: "cyberboss_reminder_create",
-    description: "Create a reminder in Cyberboss.",
+    description: "Schedule a reminder. With Yuke Home it reaches the next real chat reply while the user is talking; only a quiet conversation gets a dedicated WeChat reminder.",
     shortHint: "Create a reminder with direct text plus delayMinutes or dueAt.",
     topics: ["reminder"],
     inputSchema: {
@@ -126,7 +126,7 @@ const PROJECT_TOOLS = [
       const result = await services.reminder.create(args, context);
       return {
         text: `Reminder queued: ${result.id}`,
-        data: result,
+        data: { id: result.id, dueAtMs: result.dueAtMs, createdAt: result.createdAt },
       };
     },
   },

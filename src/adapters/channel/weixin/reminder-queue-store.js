@@ -1,75 +1,73 @@
 const fs = require("fs");
 const path = require("path");
+const { DatabaseSync } = require("node:sqlite");
 
 class ReminderQueueStore {
   constructor({ filePath }) {
     this.filePath = filePath;
-    this.state = { reminders: [] };
-    this.ensureParentDirectory();
-    this.load();
+    this.dbPath = path.join(path.dirname(filePath), "reminder-outbox.sqlite");
   }
 
-  ensureParentDirectory() {
+  // The MCP process creates timers while the bridge settles others. Never
+  // implement this as read/modify/rewrite of one shared JSON array.
+  transaction(fn) {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-  }
-
-  load() {
+    const db = new DatabaseSync(this.dbPath);
     try {
-      const raw = fs.readFileSync(this.filePath, "utf8");
-      const parsed = JSON.parse(raw);
-      const reminders = Array.isArray(parsed?.reminders) ? parsed.reminders : [];
-      this.state = {
-        reminders: reminders
-          .map(normalizeReminder)
-          .filter(Boolean)
-          .sort((left, right) => left.dueAtMs - right.dueAtMs),
-      };
-    } catch {
-      this.state = { reminders: [] };
+      db.exec("PRAGMA busy_timeout=5000; BEGIN IMMEDIATE");
+      if (!db.prepare("PRAGMA user_version").get().user_version) {
+        db.exec(`CREATE TABLE reminders (id TEXT PRIMARY KEY, account TEXT NOT NULL, due INTEGER NOT NULL,
+          check_at INTEGER NOT NULL, sending INTEGER NOT NULL DEFAULT 0, payload TEXT NOT NULL);
+          CREATE INDEX reminder_check ON reminders(account,sending,check_at); PRAGMA user_version=1;`);
+        if (fs.existsSync(this.filePath)) {
+          const { reminders } = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
+          for (const item of reminders) this.insert(db, item);
+        }
+      }
+      const result = fn(db);
+      db.exec("COMMIT");
+      return result;
+    } finally {
+      db.close(); // rolls back an incomplete transaction, including the one-time import
     }
   }
 
-  save() {
-    fs.writeFileSync(this.filePath, JSON.stringify(this.state, null, 2));
-  }
-
-  enqueue(reminder) {
-    this.load();
+  insert(db, reminder) {
     const normalized = normalizeReminder(reminder);
-    if (!normalized) {
-      throw new Error("invalid reminder");
-    }
-    this.state.reminders.push(normalized);
-    this.state.reminders.sort((left, right) => left.dueAtMs - right.dueAtMs);
-    this.save();
+    if (!normalized) throw new Error("invalid reminder");
+    db.prepare("INSERT INTO reminders(id,account,due,check_at,payload) VALUES(?,?,?,?,?)")
+      .run(normalized.id, normalized.accountId, normalized.dueAtMs, 0, JSON.stringify(normalized));
     return normalized;
   }
 
-  listDue(nowMs = Date.now()) {
-    this.load();
-    const due = [];
-    const pending = [];
+  enqueue(reminder) { return this.transaction(db => this.insert(db, reminder)); }
 
-    for (const reminder of this.state.reminders) {
-      if (reminder.dueAtMs <= nowMs) {
-        due.push(reminder);
-      } else {
-        pending.push(reminder);
-      }
-    }
-
-    if (due.length) {
-      this.state.reminders = pending;
-      this.save();
-    }
-
-    return due;
+  listDue(nowMs, account) {
+    return this.transaction(db => db.prepare("DELETE FROM reminders WHERE account=? AND due<=? AND sending=0 RETURNING payload")
+      .all(account, nowMs).map(r => JSON.parse(r.payload)));
   }
 
-  peekNextDueAtMs() {
-    this.load();
-    const first = this.state.reminders[0];
-    return Number.isFinite(first?.dueAtMs) ? first.dueAtMs : 0;
+  listChecks(account, nowMs) {
+    return this.transaction(db => db.prepare("SELECT payload FROM reminders WHERE account=? AND sending=0 AND check_at<=? ORDER BY due,id LIMIT 16")
+      .all(account, nowMs).map(r => JSON.parse(r.payload)));
+  }
+
+  retryAt(id, at) {
+    this.transaction(db => db.prepare("UPDATE reminders SET check_at=? WHERE id=? AND sending=0").run(at,id));
+  }
+  claimDelivery(id) {
+    return this.transaction(db => db.prepare("UPDATE reminders SET sending=1,payload='{}' WHERE id=? AND sending=0").run(id).changes === 1);
+  }
+  retryRejected(item, at) {
+    this.transaction(db => db.prepare("UPDATE reminders SET sending=0,payload=?,check_at=? WHERE id=? AND sending=1")
+      .run(JSON.stringify(item), at, item.id));
+  }
+  finish(id) {
+    this.transaction(db => db.prepare("DELETE FROM reminders WHERE id=?").run(id));
+  }
+  peekNextDueAtMs(account, managed) {
+    return this.transaction(db => db.prepare(`SELECT min(${managed ? "max(check_at,1)" : "due"}) AS t FROM reminders WHERE account=? AND sending=0`)
+      .get(account || "").t || 0);
   }
 }
 

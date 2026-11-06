@@ -11,6 +11,19 @@ const {
   mapBridgePacketToRuntimeEvents,
 } = require("../src/adapters/runtime/yukehome");
 
+test("a scheduled reminder sends no WeChat credentials or destination to the chat engine", async () => {
+  let wire;
+  const adapter=createYukehomeRuntimeAdapter({yukehomeBaseUrl:"http://127.0.0.1:3000",yukehomeToken:"b".repeat(64)},
+    {sessionStore:{},fetchImpl:async(url,init)=>{
+      assert.equal(url,"http://127.0.0.1:3000/internal/cyberboss/reminders/resolve");
+      wire=JSON.parse(init.body);
+      return new Response(JSON.stringify({status:"pending"}),{status:200});
+    }});
+  const item={id:"uuid",text:"synthetic",dueAtMs:22,senderId:"private",contextToken:"secret"};
+  assert.deepEqual(await adapter.resolveReminder(item),{status:"pending"});
+  assert.deepEqual(wire,{id:"uuid",text:"synthetic",due_at:22});
+});
+
 test("managed thread ids are stable per binding and message ids are idempotent", () => {
   assert.equal(logicalMainThreadId("binding-a"), logicalMainThreadId("binding-a"));
   assert.notEqual(logicalMainThreadId("binding-a"), logicalMainThreadId("binding-b"));
